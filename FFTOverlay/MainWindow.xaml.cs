@@ -45,9 +45,14 @@ namespace FFTOverlay
             this.InitializeRectangles();
             this.CaptureInstance.StartRecording();
 
-            this.UpdateTimer = new Timer(this.OnTimer);
-            this.UpdateTimer.Change(10, 10);
+            this.UpdateTimer = new Timer(_ => Application.Current.Dispatcher.Invoke(() => this.OnTimer()));
+            this.UpdateTimer.Change(0, 5);
+
+            AppDomain.CurrentDomain.UnhandledException += this.OnUnhandledException;
         }
+
+        private void OnUnhandledException(object _, UnhandledExceptionEventArgs e) 
+            => Debug.WriteLine(e.ExceptionObject);
 
         private void InitializeRectangles()
         {
@@ -82,62 +87,72 @@ namespace FFTOverlay
             return fft;
         }
 
-        private void OnTimer(object _) 
-            => Application.Current.Dispatcher.Invoke(() =>
+        private int ZeroBytesCount = 0;
+        private void OnTimer() 
+        { 
+            int frameSize = BufferSize;
+            byte[] audioBytes = new byte[frameSize];
+            this.Provider.Read(audioBytes, 0, frameSize);
+
+            if (audioBytes.Length == 0) return;
+            if (audioBytes[frameSize - 2] == 0 && this.ZeroBytesCount <= 10)
             {
-                try
+                this.ZeroBytesCount++;
+                return;
+            }
+
+            this.ZeroBytesCount = 0;
+
+            // incoming data is 16-bit (2 bytes per audio point)
+            int bytesPerPoint = 2;
+            int graphPointCount = audioBytes.Length / bytesPerPoint;
+
+            double[] pcm = new double[graphPointCount];
+            double[] fftReal = new double[graphPointCount / 2];
+
+            for (int i = 0; i < graphPointCount; i++)
+            {
+                // read the int16 from the two bytes
+                short val = BitConverter.ToInt16(audioBytes, i * 2);
+
+                // store the value in Ys as a percent (+/- 100% = 200%)
+                pcm[i] = val / Math.Pow(2, 16) * 200.0;
+            }
+
+            double[] fft = this.FFT(pcm);
+            // just keep the real half (the other half imaginary)
+            Array.Copy(fft, fftReal, fftReal.Length);
+            fftReal.Sort();
+            fftReal = fftReal.Reversed();
+
+            double offset = 5.0;
+            for (int i = 0; i < Points / 2; i++)
+            {
+                Rectangle left = (Rectangle)this.Canvas.Children[i];
+                Rectangle right = (Rectangle)this.Canvas.Children[Points - i - 1];
+
+                double height = Math.Log10(fftReal[i]) * 200.0;
+                double leftX = left.RenderTransform.Value.OffsetX;
+                double rightX = right.RenderTransform.Value.OffsetX;
+
+                if (height > left.Height)
                 {
-                    int frameSize = BufferSize;
-                    byte[] audioBytes = new byte[frameSize];
-                    this.Provider.Read(audioBytes, 0, frameSize);
-
-                    if (audioBytes.Length == 0) return;
-                    if (audioBytes[frameSize - 2] == 0) return;
-
-                    // incoming data is 16-bit (2 bytes per audio point)
-                    int bytesPerPoint = 2;
-                    int graphPointCount = audioBytes.Length / bytesPerPoint;
-
-                    double[] pcm = new double[graphPointCount];
-                    double[] fft = new double[graphPointCount];
-                    double[] fftReal = new double[graphPointCount / 2];
-
-                    for (int i = 0; i < graphPointCount; i++)
-                    {
-                        // read the int16 from the two bytes
-                        short val = BitConverter.ToInt16(audioBytes, i * 2);
-
-                        // store the value in Ys as a percent (+/- 100% = 200%)
-                        pcm[i] = val / Math.Pow(2, 16) * 200.0;
-                    }
-
-                    fft = this.FFT(pcm);
-                    // just keep the real half (the other half imaginary)
-                    Array.Copy(fft, fftReal, fftReal.Length);
-                    fftReal.Sort();
-                    fftReal = fftReal.Reversed();
-                    for (int i = 0; i < Points / 2; i++)
-                    {
-                        Rectangle left = (Rectangle)this.Canvas.Children[i];
-                        Rectangle right = (Rectangle)this.Canvas.Children[Points - i - 1];
-
-                        double height = Math.Log10(fftReal[i]) * 200.0;
-                        double leftX = left.RenderTransform.Value.OffsetX;
-                        double rightX = right.RenderTransform.Value.OffsetX;
-                        TranslateTransform leftTt = new TranslateTransform(leftX, this.Height - height);
-                        TranslateTransform rightTt = new TranslateTransform(rightX, this.Height - height);
-
-                        left.Height = height;
-                        right.Height = height;
-
-                        left.RenderTransform = leftTt;
-                        right.RenderTransform = rightTt;
-                    }
-                }
-                catch (Exception ex)
+                    double actualHeight = Math.Min(left.Height + offset, height);
+                    left.Height = actualHeight;
+                    right.Height = actualHeight;
+                } 
+                else if (height < left.Height)
                 {
-                    Debug.WriteLine(ex);
+                    double actualHeight = height <= 0 ? 0 : Math.Max(left.Height - offset, height);
+                    left.Height = actualHeight;
+                    right.Height = actualHeight;
                 }
-            });
+
+                TranslateTransform leftTt = new TranslateTransform(leftX, this.Height - left.Height);
+                TranslateTransform rightTt = new TranslateTransform(rightX, this.Height - right.Height);
+                left.RenderTransform = leftTt;
+                right.RenderTransform = rightTt;
+            }
+        }
     }
 }

@@ -51,7 +51,7 @@ namespace FFTOverlay
 
         private void InitializeRectangles()
         {
-            double rectWidth = this.Width / Points;
+            double rectWidth = (this.Width / Points) - 2.0;
             double colPoint = 1.0 / Points;
             for (double i = 0.0; i < Points; i++)
             {
@@ -116,17 +116,22 @@ namespace FFTOverlay
                     Array.Copy(fft, fftReal, fftReal.Length);
                     fftReal.Sort();
                     fftReal = fftReal.Reversed();
-                    for (int i = 0; i < fftReal.Length; i++)
+                    for (int i = 0; i < Points / 2; i++)
                     {
-                        if (i <= this.Canvas.Children.Count - 1 && this.Canvas.Children[i] is Rectangle rect)
-                        {
-                            double height = fftReal[i] * 10.0;
-                            double x = rect.RenderTransform.Value.OffsetX;
+                        Rectangle left = (Rectangle)this.Canvas.Children[i];
+                        Rectangle right = (Rectangle)this.Canvas.Children[Points - i - 1];
 
-                            rect.Height = height;
-                            TranslateTransform tt = new TranslateTransform(x, this.Height - height);
-                            rect.RenderTransform = tt;
-                        }
+                        double height = Math.Log10(fftReal[i]) * 200.0;
+                        double leftX = left.RenderTransform.Value.OffsetX;
+                        double rightX = right.RenderTransform.Value.OffsetX;
+                        TranslateTransform leftTt = new TranslateTransform(leftX, this.Height - height);
+                        TranslateTransform rightTt = new TranslateTransform(rightX, this.Height - height);
+
+                        left.Height = height;
+                        right.Height = height;
+
+                        left.RenderTransform = leftTt;
+                        right.RenderTransform = rightTt;
                     }
                 }
                 catch (Exception ex)

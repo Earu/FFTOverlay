@@ -1,13 +1,13 @@
-﻿using NAudio.Wave;
-using System.Windows;
-using Accord.Math;
-using System.Numerics;
-using System.Windows.Shapes;
-using System.Windows.Media;
+﻿using Accord.Math;
+using FFTOverlay.Helpers;
+using NAudio.Wave;
 using System;
 using System.Diagnostics;
+using System.Numerics;
 using System.Threading;
-using FFTOverlay.Helpers;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Shapes;
 
 namespace FFTOverlay
 {
@@ -60,7 +60,7 @@ namespace FFTOverlay
             double colPoint = 1.0 / Points;
             for (double i = 0.0; i < Points; i++)
             {
-                ColorRGB rgb = ColorHelper.HSL2RGB(colPoint * i, 0.5, 0.5);
+                ColorRGB rgb = ColorHelper.HSL2RGB(Math.Abs(-0.5 + colPoint * i), 0.5, 0.5);
                 SolidColorBrush brush = new SolidColorBrush(Color.FromArgb(255, rgb.R, rgb.G, rgb.B));
                 TranslateTransform tt = new TranslateTransform((rectWidth + 2.0) * i, this.Height);
                 Rectangle rect = new Rectangle
@@ -90,18 +90,34 @@ namespace FFTOverlay
         private int ZeroBytesCount = 0;
         private void OnTimer() 
         { 
-            int frameSize = BufferSize;
-            byte[] audioBytes = new byte[frameSize];
-            this.Provider.Read(audioBytes, 0, frameSize);
+            byte[] audioBytes = new byte[BufferSize];
+            double offset = 10.0;
+            this.Provider.Read(audioBytes, 0, BufferSize);
 
             if (audioBytes.Length == 0) return;
-            if (audioBytes[frameSize - 2] == 0 && this.ZeroBytesCount <= 10)
+            if (audioBytes[BufferSize - 2] == 0)
             {
-                this.ZeroBytesCount++;
+                if (this.ZeroBytesCount <= 10)
+                {
+                    this.ZeroBytesCount++;
+                }
+                else
+                {
+                    foreach (object child in this.Canvas.Children)
+                    {
+                        if (child is Rectangle rect)
+                        {
+                            rect.Height = Math.Max(rect.Height - offset, 0.0);
+                            double x = rect.RenderTransform.Value.OffsetX;
+                            rect.RenderTransform = new TranslateTransform(x, this.Height - rect.Height);
+                        }
+                    }
+
+                    this.ZeroBytesCount = 0;
+                }
+
                 return;
             }
-
-            this.ZeroBytesCount = 0;
 
             // incoming data is 16-bit (2 bytes per audio point)
             int bytesPerPoint = 2;
@@ -124,14 +140,12 @@ namespace FFTOverlay
             Array.Copy(fft, fftReal, fftReal.Length);
             fftReal.Sort();
             fftReal = fftReal.Reversed();
-
-            double offset = 5.0;
             for (int i = 0; i < Points / 2; i++)
             {
                 Rectangle left = (Rectangle)this.Canvas.Children[i];
                 Rectangle right = (Rectangle)this.Canvas.Children[Points - i - 1];
 
-                double height = Math.Log10(fftReal[i]) * 200.0;
+                double height = this.Height - (fftReal[i] * 200.0);
                 double leftX = left.RenderTransform.Value.OffsetX;
                 double rightX = right.RenderTransform.Value.OffsetX;
 
@@ -143,7 +157,7 @@ namespace FFTOverlay
                 } 
                 else if (height < left.Height)
                 {
-                    double actualHeight = height <= 0 ? 0 : Math.Max(left.Height - offset, height);
+                    double actualHeight = (height <= 0 ? 2.0 : Math.Max(left.Height - offset, height));
                     left.Height = actualHeight;
                     right.Height = actualHeight;
                 }

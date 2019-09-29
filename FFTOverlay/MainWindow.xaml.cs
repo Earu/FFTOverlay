@@ -69,6 +69,8 @@ namespace FFTOverlay
                     Height = 0,
                     Fill = brush,
                     RenderTransform = tt,
+                    IsHitTestVisible = false,
+                    Opacity = 0.75,
                 };
 
                 this.Canvas.Children.Add(rect);

@@ -6,4 +6,4 @@ A dead simple audio visualizer overlay, will react to the sounds of your machine
 ### Screencap
 ![example](https://i.imgur.com/qieREFC.png)
 
-Video: https://streamable.com/6skht
+Video: https://streamable.com/bgq5k
